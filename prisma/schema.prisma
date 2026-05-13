@@ -1,0 +1,111 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int       @id @default(autoincrement())
+  nickname  String?
+  phone     String    @unique
+  addresses Address[]
+  orders    MainOrder[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Address {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  detail    String
+  lat       Float
+  lng       Float
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Merchant {
+  id          Int       @id @default(autoincrement())
+  name        String
+  stallNo     String    @unique // 摊位编号，如 A01
+  status      String    @default("CLOSED") // OPEN, CLOSED
+  products    Product[]
+  subOrders   SubOrder[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Product {
+  id          Int      @id @default(autoincrement())
+  merchantId  Int
+  merchant    Merchant @relation(fields: [merchantId], references: [id])
+  name        String
+  price       Decimal
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model MainOrder {
+  id          Int        @id @default(autoincrement())
+  orderNo     String     @unique
+  userId      Int
+  user        User       @relation(fields: [userId], references: [id])
+  totalAmount Decimal
+  status      String     @default("PENDING_PAYMENT") // PENDING_PAYMENT, PAID, CANCELLED
+  subOrders   SubOrder[]
+  payment     Payment?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model SubOrder {
+  id          Int       @id @default(autoincrement())
+  subOrderNo  String    @unique
+  mainOrderId Int
+  mainOrder   MainOrder @relation(fields: [mainOrderId], references: [id])
+  merchantId  Int
+  merchant    Merchant  @relation(fields: [merchantId], references: [id])
+  status      String    @default("PENDING_ACCEPT") // PENDING_ACCEPT, PREPARING, READY, PICKED_UP, DELIVERED
+  delivery    Delivery?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Rider {
+  id         Int        @id @default(autoincrement())
+  name       String
+  phone      String     @unique
+  deliveries Delivery[]
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+}
+
+model Delivery {
+  id         Int      @id @default(autoincrement())
+  subOrderId Int      @unique
+  subOrder   SubOrder @relation(fields: [subOrderId], references: [id])
+  riderId    Int?
+  rider      Rider?    @relation(fields: [riderId], references: [id])
+  status     String   @default("PENDING_ASSIGN") // PENDING_ASSIGN, ASSIGNED, PICKING, DELIVERING, COMPLETED
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Payment {
+  id          Int       @id @default(autoincrement())
+  mainOrderId Int       @unique
+  mainOrder   MainOrder @relation(fields: [mainOrderId], references: [id])
+  transactionId String? @unique
+  amount      Decimal
+  method      String    @default("WECHAT")
+  status      String    @default("PENDING") // PENDING, SUCCESS, FAILED
+  paidAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
