@@ -8,13 +8,22 @@ datasource db {
 }
 
 model User {
-  id        Int       @id @default(autoincrement())
-  nickname  String?
-  phone     String    @unique
-  addresses Address[]
-  orders    MainOrder[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id              Int       @id @default(autoincrement())
+  nickname        String?
+  phone           String    @unique
+  email           String?   @unique
+  points          Int       @default(0)           // 用户积分（运营工具）
+  level           String    @default("NORMAL")    // 用户等级：NORMAL, VIP, PREMIUM
+  referralCode    String?   @unique               // 推荐码（裂变工具）
+  referrerId      Int?                            // 推荐人ID
+  isVerified      Boolean   @default(false)       // 是否实名认证
+  addresses       Address[]
+  orders          MainOrder[]
+  referrals       User[]    @relation("Referrals")
+  referrer        User?     @relation("Referrals", fields: [referrerId], references: [id])
+  auditLogs       AuditLog[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }
 
 model Address {
@@ -30,14 +39,25 @@ model Address {
 }
 
 model Merchant {
-  id          Int       @id @default(autoincrement())
-  name        String
-  stallNo     String    @unique // 摊位编号，如 A01
-  status      String    @default("CLOSED") // OPEN, CLOSED
-  products    Product[]
-  subOrders   SubOrder[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id              Int       @id @default(autoincrement())
+  name            String
+  stallNo         String    @unique
+  status          String    @default("CLOSED")    // OPEN, CLOSED, SUSPENDED
+  category        String?                         // 商户分类：小吃、饮品等
+  governmentId    String?   @unique               // 政府备案号（合规性）
+  licenseStatus   String    @default("PENDING")   // PENDING, APPROVED, REJECTED, EXPIRED
+  licenseUrl      String?                         // 营业执照URL
+  rating          Float     @default(5.0)         // 商户评分
+  totalOrders     Int       @default(0)           // 总订单数
+  totalRevenue    Decimal   @default(0)           // 总营收
+  platformFeeRate Float     @default(0.05)        // 平台抽佣比例（5%）
+  balance         Decimal   @default(0)           // 商户余额
+  products        Product[]
+  subOrders       SubOrder[]
+  withdrawals     Withdrawal[]
+  auditLogs       AuditLog[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }
 
 model Product {
@@ -47,21 +67,30 @@ model Product {
   name        String
   price       Decimal
   description String?
+  image       String?                           // 商品图片URL
+  stock       Int      @default(999)            // 库存
+  isActive    Boolean  @default(true)           // 是否上架
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
 
 model MainOrder {
-  id          Int        @id @default(autoincrement())
-  orderNo     String     @unique
-  userId      Int
-  user        User       @relation(fields: [userId], references: [id])
-  totalAmount Decimal
-  status      String     @default("PENDING_PAYMENT") // PENDING_PAYMENT, PAID, CANCELLED
-  subOrders   SubOrder[]
-  payment     Payment?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id              Int        @id @default(autoincrement())
+  orderNo         String     @unique
+  userId          Int
+  user            User       @relation(fields: [userId], references: [id])
+  totalAmount     Decimal
+  platformFee     Decimal    @default(0)        // 平台抽佣
+  merchantAmount  Decimal    @default(0)        // 商户应得
+  status          String     @default("PENDING_PAYMENT")
+  refundStatus    String     @default("NONE")   // NONE, PENDING, APPROVED, REJECTED
+  refundAmount    Decimal    @default(0)        // 退款金额
+  subOrders       SubOrder[]
+  payment         Payment?
+  refund          OrderRefund?
+  auditLogs       AuditLog[]
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 }
 
 model SubOrder {
@@ -71,7 +100,7 @@ model SubOrder {
   mainOrder   MainOrder @relation(fields: [mainOrderId], references: [id])
   merchantId  Int
   merchant    Merchant  @relation(fields: [merchantId], references: [id])
-  status      String    @default("PENDING_ACCEPT") // PENDING_ACCEPT, PREPARING, READY, PICKED_UP, DELIVERED
+  status      String    @default("PENDING_ACCEPT")
   delivery    Delivery?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -81,7 +110,11 @@ model Rider {
   id         Int        @id @default(autoincrement())
   name       String
   phone      String     @unique
+  status     String     @default("OFFLINE")     // OFFLINE, ONLINE, DELIVERING
+  rating     Float      @default(5.0)           // 骑手评分
+  totalDeliveries Int    @default(0)            // 总配送数
   deliveries Delivery[]
+  auditLogs  AuditLog[]
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
 }
@@ -91,21 +124,84 @@ model Delivery {
   subOrderId Int      @unique
   subOrder   SubOrder @relation(fields: [subOrderId], references: [id])
   riderId    Int?
-  rider      Rider?    @relation(fields: [riderId], references: [id])
-  status     String   @default("PENDING_ASSIGN") // PENDING_ASSIGN, ASSIGNED, PICKING, DELIVERING, COMPLETED
+  rider      Rider?   @relation(fields: [riderId], references: [id])
+  status     String   @default("PENDING_ASSIGN")
+  pickupTime DateTime?                          // 取货时间
+  deliveryTime DateTime?                        // 送达时间
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
 
 model Payment {
-  id          Int       @id @default(autoincrement())
-  mainOrderId Int       @unique
-  mainOrder   MainOrder @relation(fields: [mainOrderId], references: [id])
-  transactionId String? @unique
-  amount      Decimal
-  method      String    @default("WECHAT")
-  status      String    @default("PENDING") // PENDING, SUCCESS, FAILED
-  paidAt      DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id              Int       @id @default(autoincrement())
+  mainOrderId     Int       @unique
+  mainOrder       MainOrder @relation(fields: [mainOrderId], references: [id])
+  transactionId   String?   @unique
+  amount          Decimal
+  method          String    @default("WECHAT")  // WECHAT, ALIPAY
+  status          String    @default("PENDING") // PENDING, SUCCESS, FAILED
+  verifySignature Boolean   @default(false)     // 签名验证状态
+  paidAt          DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model OrderRefund {
+  id              Int       @id @default(autoincrement())
+  mainOrderId     Int       @unique
+  mainOrder       MainOrder @relation(fields: [mainOrderId], references: [id])
+  refundNo        String    @unique
+  amount          Decimal
+  reason          String                        // 退款原因
+  status          String    @default("PENDING") // PENDING, APPROVED, REJECTED, COMPLETED
+  approvedBy      String?                       // 审批人
+  approvedAt      DateTime?
+  refundedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model Withdrawal {
+  id              Int       @id @default(autoincrement())
+  merchantId      Int
+  merchant        Merchant  @relation(fields: [merchantId], references: [id])
+  withdrawalNo    String    @unique
+  amount          Decimal
+  status          String    @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
+  bankAccount     String?                       // 银行账户
+  approvedAt      DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model AuditLog {
+  id              Int       @id @default(autoincrement())
+  userId          Int?
+  user            User?     @relation(fields: [userId], references: [id])
+  merchantId      Int?
+  merchant        Merchant? @relation(fields: [merchantId], references: [id])
+  riderId         Int?
+  rider           Rider?    @relation(fields: [riderId], references: [id])
+  mainOrderId     Int?
+  mainOrder       MainOrder? @relation(fields: [mainOrderId], references: [id])
+  action          String                        // 操作类型：CREATE, UPDATE, DELETE, LOGIN
+  resource        String                        // 资源类型：User, Order, Payment
+  resourceId      Int?                          // 资源ID
+  oldValue        String?                       // 旧值（JSON）
+  newValue        String?                       // 新值（JSON）
+  ipAddress       String?                       // IP地址
+  userAgent       String?                       // User Agent
+  status          String    @default("SUCCESS") // SUCCESS, FAILED
+  createdAt       DateTime  @default(now())
+}
+
+model Referral {
+  id              Int       @id @default(autoincrement())
+  referrerId      Int
+  referredUserId  Int
+  reward          Decimal   @default(0)        // 推荐奖励
+  status          String    @default("PENDING") // PENDING, COMPLETED
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }

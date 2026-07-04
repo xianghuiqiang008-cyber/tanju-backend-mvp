@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UserModule } from './modules/user/user.module';
@@ -11,6 +11,10 @@ import { RiderModule } from './modules/rider/rider.module';
 import { CartModule } from './modules/cart/cart.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { HealthModule } from './health/health.module';
+import { FinanceModule } from './modules/finance/finance.module';
+import { AuditModule } from './modules/audit/audit.module';
+import { ReferralModule } from './modules/referral/referral.module';
+import { AuditMiddleware } from './common/middleware/audit.middleware';
 
 @Module({
   imports: [
@@ -24,8 +28,15 @@ import { HealthModule } from './health/health.module';
     RiderModule,
     CartModule,
     NotificationModule,
+    FinanceModule,
+    AuditModule,
+    ReferralModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(AuditMiddleware).forRoutes('*');
+  }
+}
