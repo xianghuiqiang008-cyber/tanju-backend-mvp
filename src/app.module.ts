@@ -14,11 +14,14 @@ import { HealthModule } from './health/health.module';
 import { FinanceModule } from './modules/finance/finance.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { ReferralModule } from './modules/referral/referral.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { CouponModule } from './modules/coupon/coupon.module';
 import { AuditMiddleware } from './common/middleware/audit.middleware';
 
 @Module({
   imports: [
     HealthModule,
+    AuthModule,
     UserModule,
     ProductModule,
     OrderModule,
@@ -31,6 +34,7 @@ import { AuditMiddleware } from './common/middleware/audit.middleware';
     FinanceModule,
     AuditModule,
     ReferralModule,
+    CouponModule,
   ],
   controllers: [AppController],
   providers: [AppService],

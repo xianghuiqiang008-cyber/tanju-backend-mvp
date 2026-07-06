@@ -12,16 +12,20 @@ model User {
   nickname        String?
   phone           String    @unique
   email           String?   @unique
-  points          Int       @default(0)           // 用户积分（运营工具）
-  level           String    @default("NORMAL")    // 用户等级：NORMAL, VIP, PREMIUM
-  referralCode    String?   @unique               // 推荐码（裂变工具）
-  referrerId      Int?                            // 推荐人ID
-  isVerified      Boolean   @default(false)       // 是否实名认证
+  password        String?                       // 密码哈希
+  points          Int       @default(0)
+  level           String    @default("NORMAL")
+  referralCode    String?   @unique
+  referrerId      Int?
+  isVerified      Boolean   @default(false)
+  role            String    @default("USER")   // USER, MERCHANT, RIDER, ADMIN
   addresses       Address[]
   orders          MainOrder[]
   referrals       User[]    @relation("Referrals")
   referrer        User?     @relation("Referrals", fields: [referrerId], references: [id])
   auditLogs       AuditLog[]
+  coupons         UserCoupon[]
+  notifications   Notification[]
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 }
@@ -35,27 +39,28 @@ model Address {
   lng       Float
   isDefault Boolean  @default(false)
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime  @updatedAt
 }
 
 model Merchant {
   id              Int       @id @default(autoincrement())
   name            String
   stallNo         String    @unique
-  status          String    @default("CLOSED")    // OPEN, CLOSED, SUSPENDED
-  category        String?                         // 商户分类：小吃、饮品等
-  governmentId    String?   @unique               // 政府备案号（合规性）
-  licenseStatus   String    @default("PENDING")   // PENDING, APPROVED, REJECTED, EXPIRED
-  licenseUrl      String?                         // 营业执照URL
-  rating          Float     @default(5.0)         // 商户评分
-  totalOrders     Int       @default(0)           // 总订单数
-  totalRevenue    Decimal   @default(0)           // 总营收
-  platformFeeRate Float     @default(0.05)        // 平台抽佣比例（5%）
-  balance         Decimal   @default(0)           // 商户余额
+  status          String    @default("CLOSED")
+  category        String?
+  governmentId    String?   @unique
+  licenseStatus   String    @default("PENDING")
+  licenseUrl      String?
+  rating          Float     @default(5.0)
+  totalOrders     Int       @default(0)
+  totalRevenue    Decimal   @default(0)
+  platformFeeRate Float     @default(0.05)
+  balance         Decimal   @default(0)
   products        Product[]
   subOrders       SubOrder[]
   withdrawals     Withdrawal[]
   auditLogs       AuditLog[]
+  coupons         Coupon[]
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 }
@@ -67,11 +72,11 @@ model Product {
   name        String
   price       Decimal
   description String?
-  image       String?                           // 商品图片URL
-  stock       Int      @default(999)            // 库存
-  isActive    Boolean  @default(true)           // 是否上架
+  image       String?
+  stock       Int      @default(999)
+  isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  updatedAt   DateTime  @updatedAt
 }
 
 model MainOrder {
@@ -80,11 +85,14 @@ model MainOrder {
   userId          Int
   user            User       @relation(fields: [userId], references: [id])
   totalAmount     Decimal
-  platformFee     Decimal    @default(0)        // 平台抽佣
-  merchantAmount  Decimal    @default(0)        // 商户应得
+  platformFee     Decimal    @default(0)
+  merchantAmount  Decimal    @default(0)
+  discountAmount  Decimal    @default(0)
+  couponId        Int?
+  coupon          Coupon?    @relation(fields: [couponId], references: [id])
   status          String     @default("PENDING_PAYMENT")
-  refundStatus    String     @default("NONE")   // NONE, PENDING, APPROVED, REJECTED
-  refundAmount    Decimal    @default(0)        // 退款金额
+  refundStatus    String     @default("NONE")
+  refundAmount    Decimal    @default(0)
   subOrders       SubOrder[]
   payment         Payment?
   refund          OrderRefund?
@@ -110,9 +118,9 @@ model Rider {
   id         Int        @id @default(autoincrement())
   name       String
   phone      String     @unique
-  status     String     @default("OFFLINE")     // OFFLINE, ONLINE, DELIVERING
-  rating     Float      @default(5.0)           // 骑手评分
-  totalDeliveries Int    @default(0)            // 总配送数
+  status     String     @default("OFFLINE")
+  rating     Float      @default(5.0)
+  totalDeliveries Int    @default(0)
   deliveries Delivery[]
   auditLogs  AuditLog[]
   createdAt  DateTime   @default(now())
@@ -126,10 +134,10 @@ model Delivery {
   riderId    Int?
   rider      Rider?   @relation(fields: [riderId], references: [id])
   status     String   @default("PENDING_ASSIGN")
-  pickupTime DateTime?                          // 取货时间
-  deliveryTime DateTime?                        // 送达时间
+  pickupTime DateTime?
+  deliveryTime DateTime?
   createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  updatedAt  DateTime  @updatedAt
 }
 
 model Payment {
@@ -138,9 +146,9 @@ model Payment {
   mainOrder       MainOrder @relation(fields: [mainOrderId], references: [id])
   transactionId   String?   @unique
   amount          Decimal
-  method          String    @default("WECHAT")  // WECHAT, ALIPAY
-  status          String    @default("PENDING") // PENDING, SUCCESS, FAILED
-  verifySignature Boolean   @default(false)     // 签名验证状态
+  method          String    @default("WECHAT")
+  status          String    @default("PENDING")
+  verifySignature Boolean   @default(false)
   paidAt          DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -152,9 +160,9 @@ model OrderRefund {
   mainOrder       MainOrder @relation(fields: [mainOrderId], references: [id])
   refundNo        String    @unique
   amount          Decimal
-  reason          String                        // 退款原因
-  status          String    @default("PENDING") // PENDING, APPROVED, REJECTED, COMPLETED
-  approvedBy      String?                       // 审批人
+  reason          String
+  status          String    @default("PENDING")
+  approvedBy      String?
   approvedAt      DateTime?
   refundedAt      DateTime?
   createdAt       DateTime  @default(now())
@@ -167,8 +175,8 @@ model Withdrawal {
   merchant        Merchant  @relation(fields: [merchantId], references: [id])
   withdrawalNo    String    @unique
   amount          Decimal
-  status          String    @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
-  bankAccount     String?                       // 银行账户
+  status          String    @default("PENDING")
+  bankAccount     String?
   approvedAt      DateTime?
   completedAt     DateTime?
   createdAt       DateTime  @default(now())
@@ -185,14 +193,14 @@ model AuditLog {
   rider           Rider?    @relation(fields: [riderId], references: [id])
   mainOrderId     Int?
   mainOrder       MainOrder? @relation(fields: [mainOrderId], references: [id])
-  action          String                        // 操作类型：CREATE, UPDATE, DELETE, LOGIN
-  resource        String                        // 资源类型：User, Order, Payment
-  resourceId      Int?                          // 资源ID
-  oldValue        String?                       // 旧值（JSON）
-  newValue        String?                       // 新值（JSON）
-  ipAddress       String?                       // IP地址
-  userAgent       String?                       // User Agent
-  status          String    @default("SUCCESS") // SUCCESS, FAILED
+  action          String
+  resource        String
+  resourceId      Int?
+  oldValue        String?
+  newValue        String?
+  ipAddress       String?
+  userAgent       String?
+  status          String    @default("SUCCESS")
   createdAt       DateTime  @default(now())
 }
 
@@ -200,8 +208,55 @@ model Referral {
   id              Int       @id @default(autoincrement())
   referrerId      Int
   referredUserId  Int
-  reward          Decimal   @default(0)        // 推荐奖励
-  status          String    @default("PENDING") // PENDING, COMPLETED
+  reward          Decimal   @default(0)
+  status          String    @default("PENDING")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model Coupon {
+  id              Int       @id @default(autoincrement())
+  code            String    @unique
+  merchantId      Int?
+  merchant        Merchant? @relation(fields: [merchantId], references: [id])
+  name            String
+  description     String?
+  type            String                        // DISCOUNT, FULL_REDUCTION
+  discountValue   Decimal                       // 折扣值或满减金额
+  minOrderAmount  Decimal   @default(0)         // 最低订单金额
+  maxDiscountAmount Decimal? @default(0)        // 最大折扣金额（仅折扣券）
+  quantity        Int                           // 总数量
+  usedQuantity    Int       @default(0)         // 已使用数量
+  startDate       DateTime
+  endDate         DateTime
+  isActive        Boolean   @default(true)
+  userCoupons     UserCoupon[]
+  orders          MainOrder[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model UserCoupon {
+  id              Int       @id @default(autoincrement())
+  userId          Int
+  user            User      @relation(fields: [userId], references: [id])
+  couponId        Int
+  coupon          Coupon    @relation(fields: [couponId], references: [id])
+  isUsed          Boolean   @default(false)
+  usedAt          DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model Notification {
+  id              Int       @id @default(autoincrement())
+  userId          Int
+  user            User      @relation(fields: [userId], references: [id])
+  type            String                        // ORDER_STATUS, COUPON, SYSTEM
+  title           String
+  content         String
+  isRead          Boolean   @default(false)
+  readAt          DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 }
