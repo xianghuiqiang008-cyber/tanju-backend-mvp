@@ -16,6 +16,8 @@ import { AuditModule } from './modules/audit/audit.module';
 import { ReferralModule } from './modules/referral/referral.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CouponModule } from './modules/coupon/coupon.module';
+import { StatisticsModule } from './modules/statistics/statistics.module';
+import { BulkModule } from './modules/bulk/bulk.module';
 import { AuditMiddleware } from './common/middleware/audit.middleware';
 
 @Module({
@@ -35,6 +37,8 @@ import { AuditMiddleware } from './common/middleware/audit.middleware';
     AuditModule,
     ReferralModule,
     CouponModule,
+    StatisticsModule,
+    BulkModule,
   ],
   controllers: [AppController],
   providers: [AppService],
